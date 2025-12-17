@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mic, Power, Terminal, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Mic, Power, Terminal, AlertTriangle, ShieldCheck, Share2 } from 'lucide-react';
 import Orb from './components/Orb';
 import { useGeminiLive } from './hooks/useGeminiLive';
 import { AppState } from './types';
@@ -74,6 +74,15 @@ const App: React.FC = () => {
     addLog("System shutting down...");
   };
 
+  const handleShare = async () => {
+    try {
+        await navigator.clipboard.writeText(window.location.href);
+        addLog("LINK COPIED TO CLIPBOARD");
+    } catch (e) {
+        addLog("SHARE FAILED");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center overflow-hidden relative selection:bg-cyan-500/30">
       
@@ -87,8 +96,17 @@ const App: React.FC = () => {
             <Terminal className="text-cyan-500 w-6 h-6" />
             <h1 className="text-2xl font-bold tracking-widest text-cyan-500 font-mono">J.A.R.V.I.S.</h1>
         </div>
-        <div className="text-xs text-cyan-700 font-mono">
-             V.3.1.4 // SECURE
+        <div className="flex items-center gap-4">
+            <button 
+                onClick={handleShare}
+                className="text-cyan-700 hover:text-cyan-400 transition-colors"
+                title="Copy Link"
+            >
+                <Share2 className="w-5 h-5" />
+            </button>
+            <div className="text-xs text-cyan-700 font-mono hidden sm:block">
+                V.3.1.4 // SECURE
+            </div>
         </div>
       </div>
 
