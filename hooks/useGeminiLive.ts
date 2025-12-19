@@ -60,7 +60,7 @@ export const useGeminiLive = () => {
       
       const apiKey = process.env.API_KEY;
       if (!apiKey) {
-          throw new Error("Critical System Error: API Key not found.");
+          throw new Error("API_KEY_MISSING");
       }
 
       // Initialize Google GenAI
@@ -71,7 +71,7 @@ export const useGeminiLive = () => {
         inputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         outputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       } catch (e) {
-        throw new Error("Audio Hardware Initialization Failed. Browser may not be supported.");
+        throw new Error("AUDIO_HARDWARE_FAILED");
       }
       
       // Setup Output Node
@@ -84,7 +84,7 @@ export const useGeminiLive = () => {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         streamRef.current = stream;
       } catch (e) {
-        throw new Error("Microphone Access Denied. Protocol halted.");
+        throw new Error("MIC_ACCESS_DENIED");
       }
 
       // Start Session

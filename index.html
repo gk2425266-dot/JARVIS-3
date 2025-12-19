@@ -3,8 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>JARVIS AI</title>
+    <title>JARVIS AI | Advanced Assistant</title>
     
+    <!-- SEO & Social Sharing -->
+    <meta name="description" content="J.A.R.V.I.S. - Advanced AI Voice Assistant. Experience futuristic real-time conversation." />
+    <meta property="og:title" content="JARVIS AI Assistant" />
+    <meta property="og:description" content="Next-gen voice-interactive AI system with real-time processing." />
+    <meta property="og:image" content="icon.svg" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <!-- PWA Configuration -->
     <link rel="manifest" href="manifest.json" />
     <link rel="icon" type="image/svg+xml" href="icon.svg" />
@@ -14,7 +22,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="JARVIS" />
 
+    <!-- Scripts -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
       body {
@@ -25,6 +35,17 @@
       }
       .jarvis-glow {
         box-shadow: 0 0 50px rgba(6, 182, 212, 0.5), inset 0 0 20px rgba(6, 182, 212, 0.2);
+      }
+      /* Custom scrollbar for terminal logs */
+      ::-webkit-scrollbar {
+        width: 4px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(6, 182, 212, 0.2);
+        border-radius: 10px;
       }
     </style>
   <script type="importmap">
@@ -41,5 +62,7 @@
 </head>
   <body>
     <div id="root"></div>
+    <!-- Babel is included but usually ESM handles standard React projects here. 
+         If you need to transpile scripts in index.html, you can use <script type="text/babel"> -->
   </body>
 </html>

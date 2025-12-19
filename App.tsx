@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mic, Power, Terminal, AlertTriangle, ShieldCheck, Share2 } from 'lucide-react';
+import { Mic, MicOff, Power, Terminal, AlertTriangle, ShieldCheck, Share2, RefreshCw, Lock } from 'lucide-react';
 import Orb from './components/Orb';
 import { useGeminiLive } from './hooks/useGeminiLive';
+import { useAmbientSound } from './hooks/useAmbientSound';
 import { AppState } from './types';
 import { PERMISSION_PROMPT } from './constants';
 
@@ -10,33 +11,44 @@ const App: React.FC = () => {
   const { connect, disconnect, isConnected, isSpeaking, error } = useGeminiLive();
   const [logs, setLogs] = useState<string[]>([]);
 
+  // Initialize Ambient Sound
+  useAmbientSound(appState === AppState.LISTENING);
+
   const addLog = (msg: string) => {
     setLogs(prev => [...prev.slice(-4), `> ${msg}`]);
   };
 
-  // Sync internal state with hook state
+  useEffect(() => {
+    addLog("Environment: Secure");
+    addLog("System: Ready for initialization.");
+    addLog("Developer: MR. ANSH RAJ");
+  }, []);
+
   useEffect(() => {
     if (isConnected) {
       setAppState(AppState.LISTENING);
       addLog("J.A.R.V.I.S. Connected.");
     } else if (appState === AppState.LISTENING) {
-        // If hook disconnected but we thought we were listening
        setAppState(AppState.IDLE);
        addLog("Connection lost.");
     }
-  }, [isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isConnected]);
 
-  // Handle Errors
   useEffect(() => {
     if (error) {
       setAppState(AppState.ERROR);
-      addLog(`ERROR: ${error}`);
+      if (error === "MIC_ACCESS_DENIED") {
+        addLog("CRITICAL: Bio-metric (Audio) Access Denied.");
+      } else if (error === "API_KEY_MISSING") {
+        addLog("CRITICAL: Secure Key missing from environment.");
+      } else {
+        addLog(`ERROR: ${error}`);
+      }
     }
   }, [error]);
 
   const speakSystemMessage = useCallback((text: string, onEnd?: () => void) => {
     const utterance = new SpeechSynthesisUtterance(text);
-    // Try to find a good system voice
     const voices = window.speechSynthesis.getVoices();
     const systemVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Google US English')) || voices[0];
     if (systemVoice) utterance.voice = systemVoice;
@@ -53,8 +65,6 @@ const App: React.FC = () => {
   const handleInitialize = () => {
     setAppState(AppState.REQUESTING_PERMISSION);
     addLog("Initializing authentication protocol...");
-    
-    // Slight delay for effect
     setTimeout(() => {
         speakSystemMessage(PERMISSION_PROMPT);
     }, 500);
@@ -62,7 +72,6 @@ const App: React.FC = () => {
 
   const handlePermissionGranted = () => {
     addLog("Permission granted. Accessing audio hardware...");
-    // Stop any browser TTS if overlapping
     window.speechSynthesis.cancel(); 
     connect();
   };
@@ -105,7 +114,7 @@ const App: React.FC = () => {
                 <Share2 className="w-5 h-5" />
             </button>
             <div className="text-xs text-cyan-700 font-mono hidden sm:block">
-                V.3.1.4 // SECURE
+                V.3.5.0 // DEPLOYED_NETLIFY
             </div>
         </div>
       </div>
@@ -123,12 +132,13 @@ const App: React.FC = () => {
         </div>
 
         {/* Interaction Area */}
-        <div className="w-full flex flex-col items-center gap-6 min-h-[150px]">
+        <div className="w-full flex flex-col items-center gap-6 min-h-[180px]">
             
             {appState === AppState.IDLE && (
                 <button 
                     onClick={handleInitialize}
-                    className="group relative px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 font-bold tracking-widest hover:bg-cyan-500 hover:text-black transition-all duration-300 uppercase clip-path-polygon"
+                    className="group relative px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 font-bold tracking-widest hover:bg-cyan-500 hover:text-black transition-all duration-300 uppercase"
+                    style={{ clipPath: 'polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%)' }}
                 >
                     <span className="flex items-center gap-2">
                         <Power className="w-4 h-4" /> Initialize System
@@ -139,15 +149,15 @@ const App: React.FC = () => {
 
             {appState === AppState.REQUESTING_PERMISSION && (
                 <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <p className="text-cyan-100 text-lg text-center max-w-md bg-black/50 p-4 border-l-2 border-cyan-500">
+                    <p className="text-cyan-100 text-lg text-center max-w-md bg-black/50 p-4 border-l-2 border-cyan-500 italic">
                         "{PERMISSION_PROMPT}"
                     </p>
                     <div className="flex gap-4">
                          <button 
                             onClick={handlePermissionGranted}
-                            className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-black font-bold uppercase tracking-wider transition-colors"
+                            className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-black font-bold uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(6,182,212,0.4)]"
                         >
-                            Yes, Listen
+                            Authorize
                         </button>
                         <button 
                             onClick={() => {
@@ -164,37 +174,76 @@ const App: React.FC = () => {
 
             {appState === AppState.LISTENING && (
                 <div className="flex flex-col items-center gap-4 animate-in fade-in">
-                    <div className="flex items-center gap-2 text-cyan-300 bg-cyan-950/20 px-4 py-2 rounded-full border border-cyan-500/20">
-                        <ShieldCheck className="w-4 h-4" />
-                        <span className="text-xs uppercase tracking-widest">Protocol Active</span>
+                    <div className="flex items-center gap-2 text-cyan-300 bg-cyan-950/20 px-4 py-2 rounded-full border border-cyan-500/20 animate-pulse">
+                        <Mic className="w-4 h-4" />
+                        <span className="text-xs uppercase tracking-widest">Live Bio-Feed Active</span>
                     </div>
                     <button 
                         onClick={handleShutdown}
-                        className="text-xs text-red-500 hover:text-red-400 hover:underline uppercase tracking-widest mt-4"
+                        className="text-xs text-red-500 hover:text-red-400 hover:underline uppercase tracking-widest mt-4 flex items-center gap-1"
                     >
-                        Deactivate
+                        <Power className="w-3 h-3" /> Deactivate Protocol
                     </button>
                 </div>
             )}
 
             {appState === AppState.ERROR && (
-                <div className="text-red-500 flex flex-col items-center gap-2">
-                    <AlertTriangle className="w-8 h-8" />
-                    <p className="text-center max-w-xs font-mono">{error}</p>
-                    <button 
-                        onClick={() => setAppState(AppState.IDLE)}
-                        className="mt-4 text-xs border border-red-500 px-4 py-2 hover:bg-red-900/20"
-                    >
-                        RESET PROTOCOL
-                    </button>
+                <div className="flex flex-col items-center gap-4 w-full animate-in zoom-in duration-300">
+                    {error === "MIC_ACCESS_DENIED" ? (
+                        <div className="bg-red-950/20 border border-red-500/40 p-6 rounded-lg max-w-md w-full backdrop-blur-md">
+                            <div className="flex items-center gap-3 text-red-500 mb-4">
+                                <MicOff className="w-6 h-6" />
+                                <h3 className="text-lg font-bold tracking-wider uppercase">Microphone Access Denied</h3>
+                            </div>
+                            <div className="space-y-3 text-red-200/80 text-sm font-mono leading-relaxed">
+                                <p className="flex gap-2"><span className="text-red-500">01.</span> Click the <Lock className="inline w-3 h-3 mx-1 text-cyan-400" /> icon in your browser address bar.</p>
+                                <p className="flex gap-2"><span className="text-red-500">02.</span> Toggle 'Microphone' to <span className="text-cyan-400">ON</span>.</p>
+                                <p className="flex gap-2"><span className="text-red-500">03.</span> Reload the interface to re-establish secure link.</p>
+                            </div>
+                            <button 
+                                onClick={() => window.location.reload()}
+                                className="mt-6 w-full py-2 bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw className="w-4 h-4" /> Reload System
+                            </button>
+                        </div>
+                    ) : error === "API_KEY_MISSING" ? (
+                         <div className="bg-red-950/20 border border-red-500/40 p-6 rounded-lg max-w-md w-full backdrop-blur-md text-center">
+                            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                            <h3 className="text-lg font-bold text-red-500 uppercase mb-2">Secure Key Missing</h3>
+                            <p className="text-red-200/60 text-xs font-mono mb-4 leading-relaxed">
+                                J.A.R.V.I.S. requires an API_KEY environment variable. 
+                                Set it in Netlify: Site Settings > Environment Variables.
+                            </p>
+                            <button 
+                                onClick={() => setAppState(AppState.IDLE)}
+                                className="px-6 py-2 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-all uppercase text-xs font-bold"
+                            >
+                                Re-verify
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="text-red-500 flex flex-col items-center gap-2">
+                            <AlertTriangle className="w-8 h-8" />
+                            <p className="text-center max-w-xs font-mono">{error}</p>
+                            <button 
+                                onClick={() => setAppState(AppState.IDLE)}
+                                className="mt-4 text-xs border border-red-500 px-4 py-2 hover:bg-red-900/20 uppercase tracking-widest"
+                            >
+                                Reset Protocol
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
 
         {/* System Logs */}
-        <div className="w-full max-w-md font-mono text-xs text-cyan-700/60 mt-8 space-y-1 h-24 flex flex-col justify-end border-t border-cyan-900/30 pt-4">
+        <div className="w-full max-w-md font-mono text-[10px] md:text-xs text-cyan-700/60 mt-8 space-y-1 h-24 flex flex-col justify-end border-t border-cyan-900/30 pt-4">
             {logs.map((log, i) => (
-                <div key={i} className="animate-pulse">{log}</div>
+                <div key={i} className={`animate-pulse ${log.includes('CRITICAL') ? 'text-red-500/80' : ''}`}>
+                    {log}
+                </div>
             ))}
         </div>
 
