@@ -11,16 +11,6 @@
     <meta property="og:description" content="Next-gen voice-interactive AI system with real-time processing." />
     <meta property="og:image" content="icon.svg" />
     <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-
-    <!-- PWA Configuration -->
-    <link rel="manifest" href="manifest.json" />
-    <link rel="icon" type="image/svg+xml" href="icon.svg" />
-    <link rel="apple-touch-icon" href="icon.svg" />
-    <meta name="theme-color" content="#050505" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="JARVIS" />
 
     <!-- Scripts -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -31,9 +21,6 @@
         background-color: #050505;
         color: #e0f7fa;
         overscroll-behavior: none;
-      }
-      .jarvis-glow {
-        box-shadow: 0 0 50px rgba(6, 182, 212, 0.5), inset 0 0 20px rgba(6, 182, 212, 0.2);
       }
       .custom-scrollbar::-webkit-scrollbar {
         width: 2px;
@@ -63,18 +50,23 @@
         animation: scan-line 2s linear infinite;
         pointer-events: none;
       }
+      @keyframes pulse-soft {
+        0%, 100% { opacity: 0.8; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.02); }
+      }
+      .pulse-activation {
+        animation: pulse-soft 2s infinite ease-in-out;
+      }
     </style>
-    <script>
-      window.process = window.process || { env: {} };
-    </script>
+    <script>window.process = { env: {} };</script>
     <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.0.0",
-    "react-dom": "https://esm.sh/react-dom@^19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@^19.0.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@^0.474.0",
-    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.474.0",
+    "@google/genai": "https://esm.sh/@google/genai@1.33.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/"
   }

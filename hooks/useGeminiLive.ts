@@ -14,47 +14,42 @@ export const useGeminiLive = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchSources, setSearchSources] = useState<SearchSource[]>([]);
   
-  // Audio Contexts
   const inputContextRef = useRef<AudioContext | null>(null);
   const outputContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   
-  // Audio Playback
   const nextStartTimeRef = useRef<number>(0);
   const scheduledSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  
-  // Session
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
 
   const cleanup = useCallback(() => {
+    console.log("Severing JARVIS neural link...");
     if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+        processorRef.current.disconnect();
+        processorRef.current = null;
     }
     if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
     }
+    
+    scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
+    scheduledSourcesRef.current.clear();
+    
     if (inputContextRef.current) {
-      inputContextRef.current.close();
+      inputContextRef.current.close().catch(() => {});
       inputContextRef.current = null;
     }
     if (outputContextRef.current) {
-      outputContextRef.current.close();
+      outputContextRef.current.close().catch(() => {});
       outputContextRef.current = null;
     }
-    
-    // Stop all scheduled audio
-    scheduledSourcesRef.current.forEach(s => {
-        try { s.stop(); } catch (e) {}
-    });
-    scheduledSourcesRef.current.clear();
     
     setIsConnected(false);
     setIsSpeaking(false);
@@ -67,89 +62,62 @@ export const useGeminiLive = () => {
       setSearchSources([]);
       
       const apiKey = process.env.API_KEY;
-      if (!apiKey) {
-          throw new Error("ERR_AUTH_MISSING");
-      }
+      if (!apiKey) throw new Error("ERR_AUTH_MISSING");
 
-      // Create a fresh instance for the connection
       const ai = new GoogleGenAI({ apiKey });
       
-      try {
-        inputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-        outputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      } catch (e) {
-        throw new Error("ERR_HARDWARE_FAIL");
-      }
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      inputContextRef.current = new AudioCtx({ sampleRate: 16000 });
+      outputContextRef.current = new AudioCtx({ sampleRate: 24000 });
       
+      await inputContextRef.current.resume();
+      await outputContextRef.current.resume();
+
       const outputNode = outputContextRef.current.createGain();
       outputNode.connect(outputContextRef.current.destination);
 
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        streamRef.current = stream;
-      } catch (e) {
-        if (e instanceof Error && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError')) {
-           throw new Error("ERR_MIC_DENIED");
-        }
-        throw new Error("ERR_MIC_GENERAL");
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
 
       const sessionPromise = ai.live.connect({
         model: MODEL_NAME,
         callbacks: {
           onopen: () => {
-            console.log('Gemini Live Session Opened');
+            console.log("Live Uplink Online.");
             setIsConnected(true);
-            
             if (!inputContextRef.current || !streamRef.current) return;
             
             const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
             sourceRef.current = source;
-            
             const processor = inputContextRef.current.createScriptProcessor(4096, 1, 1);
             processorRef.current = processor;
             
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              const pcmBlob = createPcmBlob(inputData);
               
-              sessionPromise.then((session) => {
-                session.sendRealtimeInput({ media: pcmBlob });
-              });
+              // Neural Noise Gate (Filter silence)
+              let maxVal = 0;
+              for(let i=0; i<inputData.length; i++) {
+                if(Math.abs(inputData[i]) > maxVal) maxVal = Math.abs(inputData[i]);
+              }
+
+              if (maxVal > 0.005) {
+                const pcmBlob = createPcmBlob(inputData);
+                sessionPromise.then((session) => {
+                  session.sendRealtimeInput({ media: pcmBlob });
+                });
+              }
             };
             
             source.connect(processor);
             processor.connect(inputContextRef.current.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            const groundingMetadata = (message.serverContent as any)?.groundingMetadata;
-            if (groundingMetadata?.groundingChunks) {
-              const sources: SearchSource[] = groundingMetadata.groundingChunks
-                .filter((chunk: any) => chunk.web)
-                .map((chunk: any) => ({
-                  uri: chunk.web.uri,
-                  title: chunk.web.title || 'Source Link'
-                }));
-              
-              if (sources.length > 0) {
-                setSearchSources(prev => {
-                  const combined = [...prev, ...sources];
-                  return Array.from(new Map(combined.map(s => [s.uri, s])).values());
-                });
-              }
-            }
-
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            
             if (base64Audio && outputContextRef.current) {
               setIsSpeaking(true);
               const ctx = outputContextRef.current;
-              
-              nextStartTimeRef.current = Math.max(
-                nextStartTimeRef.current,
-                ctx.currentTime
-              );
+              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
               
               const audioBytes = decodeBase64(base64Audio);
               const audioBuffer = await decodeAudioData(audioBytes, ctx, 24000, 1);
@@ -157,71 +125,57 @@ export const useGeminiLive = () => {
               const source = ctx.createBufferSource();
               source.buffer = audioBuffer;
               source.connect(outputNode);
-              
-              source.addEventListener('ended', () => {
+              source.onended = () => {
                 scheduledSourcesRef.current.delete(source);
-                if (scheduledSourcesRef.current.size === 0) {
-                    setIsSpeaking(false);
-                }
-              });
-              
+                if (scheduledSourcesRef.current.size === 0) setIsSpeaking(false);
+              };
               source.start(nextStartTimeRef.current);
               scheduledSourcesRef.current.add(source);
-              
               nextStartTimeRef.current += audioBuffer.duration;
             }
 
             if (message.serverContent?.interrupted) {
-              scheduledSourcesRef.current.forEach(s => {
-                 try { s.stop(); } catch (e) {}
-              });
+              scheduledSourcesRef.current.forEach(s => { try { s.stop(); } catch (e) {} });
               scheduledSourcesRef.current.clear();
               nextStartTimeRef.current = 0;
               setIsSpeaking(false);
             }
           },
           onclose: (e) => {
-            console.log('Gemini Live Session Closed', e);
+            console.warn("Server connection severed.", e);
             cleanup();
           },
           onerror: (err: any) => {
-            console.error('Gemini Live Error', err);
-            let msg = "ERR_SESSION_DROP";
-            if (err instanceof Error) {
-                if (err.message.includes("403")) msg = "ERR_QUOTA_EXCEEDED";
-                else if (err.message.includes("401")) msg = "ERR_AUTH_INVALID";
-                else msg = err.message;
-            }
+            console.error('Session dropped:', err);
+            // Parse error for user display
+            let msg = "PROTOCOL_TIMEOUT";
+            if (err?.message) msg = err.message;
+            else if (typeof err === 'string') msg = err;
+            
+            if (msg.includes("403")) msg = "ERR_API_RESTRICTED";
+            if (msg.includes("401")) msg = "ERR_KEY_INVALID";
+            
             setError(msg);
             cleanup();
           }
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          tools: [{ googleSearch: {} }],
-          thinkingConfig: { thinkingBudget: 0 }, // Optimized for zero-latency quick answers
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } }
+          // Note: googleSearch tool is currently excluded for stability in Live Native Audio protocol
+          thinkingConfig: { thinkingBudget: 0 },
+          speechConfig: { 
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } 
           },
           systemInstruction: SYSTEM_INSTRUCTION
         }
       });
-      
       sessionPromiseRef.current = sessionPromise;
-
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "ERR_INITIALIZATION");
+      console.error('Initialization error:', err);
+      setError(err.message || "HARDWARE_FAILURE");
       cleanup();
     }
   }, [cleanup]);
 
-  return {
-    connect,
-    disconnect: cleanup,
-    isConnected,
-    isSpeaking,
-    searchSources,
-    error
-  };
+  return { connect, disconnect: cleanup, isConnected, isSpeaking, searchSources, error };
 };
