@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Power, Terminal, ShieldAlert, Database, Lock, ExternalLink, Globe, Key, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Power, Terminal, ShieldAlert, Database, Lock, ExternalLink, Globe, Key, ShieldCheck, HelpCircle } from 'lucide-react';
 import Orb from './components/Orb.tsx';
 import { useGeminiLive } from './hooks/useGeminiLive.ts';
 import { useAmbientSound } from './hooks/useAmbientSound.ts';
@@ -15,10 +15,52 @@ declare global {
   }
 
   interface Window {
-    // Removed readonly as it causes modifier mismatch errors when extending the Window interface in certain environments
     aistudio?: AIStudio;
   }
 }
+
+const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string }> = {
+  ERR_AUTH_MISSING: {
+    title: "Security Credentials Missing",
+    detail: "The system core is lacking an authentication token. Check deployment environment variables.",
+    action: "Re-verify API_KEY configuration."
+  },
+  ERR_KEY_INVALID: {
+    title: "Invalid Token Detected",
+    detail: "The provided handshake token was rejected by the neural server. It may be expired or revoked.",
+    action: "Update API credentials in system settings."
+  },
+  ERR_NOT_FOUND: {
+    title: "Resource Not Found",
+    detail: "The requested model 'Gemini 2.5' or specific resource is unavailable for this project.",
+    action: "Check project permissions or select a different key."
+  },
+  ERR_QUOTA_EXCEEDED: {
+    title: "Bandwidth Quota Exceeded",
+    detail: "The neural link has hit its transmission limit for this period.",
+    action: "Await system cool-down or upgrade plan."
+  },
+  ERR_HARDWARE_ACCESS: {
+    title: "Hardware Interface Error",
+    detail: "Failed to establish a link with the local audio input devices.",
+    action: "Grant microphone permissions in browser."
+  },
+  ERR_SESSION_DROP: {
+    title: "Uplink Interrupted",
+    detail: "The connection to the server was severed unexpectedly.",
+    action: "Check network stability and retry."
+  },
+  ERR_SAFETY_FILTER: {
+    title: "Safety Protocol Breach",
+    detail: "The last transmission triggered automated safety filters.",
+    action: "Refine input parameters and attempt re-link."
+  },
+  ERR_LINK_FAILURE: {
+    title: "Neural Handshake Failure",
+    detail: "A critical error occurred during the system initialization phase.",
+    action: "Inspect terminal logs for diagnostic data."
+  }
+};
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -51,24 +93,25 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      // Check for authentication errors or specific "entity not found" error to trigger key selection as per guidelines
-      if (
-        error.includes("AUTH_MISSING") || 
-        error.includes("401") || 
-        error.includes("KEY_INVALID") || 
-        error.includes("NOT_FOUND") || 
-        error.toLowerCase().includes("requested entity was not found")
-      ) {
-        // Only show key prompt if we are in an environment that supports it (AI Studio)
+      if (error === "ERR_AUTH_MISSING" || error === "ERR_KEY_INVALID" || error === "ERR_NOT_FOUND") {
         if (window.aistudio) {
           setNeedsKey(true);
         } else {
-          addLog("CRITICAL: API_KEY environment variable missing on host.");
+          addLog("CRITICAL: Authentication hardware missing on host.");
         }
       }
       setAppState(AppState.ERROR);
       addLog(`ERR: ${error.toUpperCase()}`);
     }
+  }, [error]);
+
+  const errorDetail = useMemo(() => {
+    if (!error) return null;
+    return ERROR_GUIDANCE[error] || { 
+      title: "Unknown Protocol Error", 
+      detail: "An unspecified error occurred. Consult diagnostic logs.", 
+      action: "Attempt system reset." 
+    };
   }, [error]);
 
   const speakSystemMessage = useCallback((text: string, onEnd?: () => void) => {
@@ -86,7 +129,6 @@ const App: React.FC = () => {
     setAppState(AppState.REQUESTING_PERMISSION);
     addLog("Initiating handshake...");
     
-    // Check if we need to request a key via AI Studio dialog
     if (window.aistudio) {
       try {
         const hasKey = await window.aistudio.hasSelectedApiKey();
@@ -106,7 +148,6 @@ const App: React.FC = () => {
     if (window.aistudio) {
       try {
         await window.aistudio.openSelectKey();
-        // Assume key selection was successful to mitigate potential race conditions
         setNeedsKey(false);
         addLog("Key selection synchronized.");
         connect();
@@ -265,17 +306,26 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {appState === AppState.ERROR && !needsKey && (
-                <div className="flex flex-col items-center gap-4 animate-in shake duration-500">
-                     <div className="flex items-center gap-2 text-red-500 bg-red-950/20 px-4 py-2 border border-red-500/30 rounded">
-                        <ShieldAlert className="w-4 h-4" />
-                        <span className="text-[10px] uppercase font-bold tracking-widest">{error}</span>
+            {appState === AppState.ERROR && !needsKey && errorDetail && (
+                <div className="flex flex-col items-center gap-4 animate-in shake duration-500 max-w-md w-full">
+                     <div className="flex flex-col gap-3 bg-red-950/20 p-5 border border-red-500/30 rounded-lg backdrop-blur-md">
+                        <div className="flex items-center gap-2 text-red-500 border-b border-red-500/20 pb-2">
+                            <ShieldAlert className="w-5 h-5 shrink-0" />
+                            <h3 className="text-xs uppercase font-bold tracking-widest">{errorDetail.title}</h3>
+                        </div>
+                        <p className="text-[10px] text-red-100/60 leading-relaxed uppercase">
+                          {errorDetail.detail}
+                        </p>
+                        <div className="flex items-center gap-2 text-[9px] text-cyan-400 bg-cyan-950/30 p-2 rounded border border-cyan-500/10">
+                          <HelpCircle className="w-3 h-3 shrink-0" />
+                          <span>SUGGESTION: {errorDetail.action}</span>
+                        </div>
                      </div>
                      <button 
                         onClick={() => { setAppState(AppState.IDLE); disconnect(); }}
-                        className="text-[9px] text-cyan-500/60 hover:text-cyan-400 uppercase tracking-widest border border-cyan-500/20 px-4 py-1 hover:bg-cyan-500/5"
+                        className="text-[9px] text-cyan-500/60 hover:text-cyan-400 uppercase tracking-widest border border-cyan-500/20 px-6 py-2 hover:bg-cyan-500/5 transition-all"
                      >
-                        Reset System Core
+                        Initiate System Recovery
                      </button>
                 </div>
             )}

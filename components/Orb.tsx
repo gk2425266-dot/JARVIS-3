@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface OrbProps {
@@ -36,16 +37,16 @@ const Orb: React.FC<OrbProps> = ({ isActive, isSpeaking, state }) => {
         className={`relative w-32 h-32 rounded-full ${innerColor} ${outerGlow} transition-all duration-700 flex items-center justify-center`}
       >
         <div className={`absolute w-full h-full rounded-full bg-white/10 blur-xl ${isSpeaking ? 'animate-pulse' : ''}`}></div>
-        {state === 'ERROR' && <div className="text-white font-bold text-xs animate-pulse tracking-tighter">FAILURE</div>}
+        {state === 'ERROR' && <div className="text-white font-bold text-xs animate-pulse tracking-tighter">BREACH</div>}
       </div>
       
       {/* Status Label */}
-      <div className={`absolute -bottom-14 tracking-[0.3em] font-bold text-[10px] uppercase transition-colors duration-500 ${state === 'ERROR' ? 'text-red-500' : 'text-cyan-500/80'}`}>
-        {state === 'IDLE' ? 'System Offline' : 
-         state === 'WAITING' ? 'Authentication Required' :
-         state === 'ERROR' ? 'Protocol Breach' :
-         state === 'LISTENING' && !isSpeaking ? 'Listening...' : 
-         isSpeaking ? 'Transmitting...' : 'Uplink Established'}
+      <div className={`absolute -bottom-14 tracking-[0.3em] font-bold text-[10px] uppercase transition-colors duration-500 text-center px-4 ${state === 'ERROR' ? 'text-red-500' : 'text-cyan-500/80'}`}>
+        {state === 'IDLE' ? 'System Dormant' : 
+         state === 'WAITING' ? 'Handshake Required' :
+         state === 'ERROR' ? 'Protocol Violation' :
+         state === 'LISTENING' && !isSpeaking ? 'Analyzing Input...' : 
+         isSpeaking ? 'Transmitting Data...' : 'Neural Link Stable'}
       </div>
     </div>
   );

@@ -54,8 +54,13 @@ export const useGeminiLive = () => {
     try {
       setError(null);
       
-      // Initialize AI right before connection using process.env.API_KEY directly as per SDK guidelines
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        setError("ERR_AUTH_MISSING");
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       inputContextRef.current = new AudioCtx({ sampleRate: 16000 });
@@ -90,10 +95,8 @@ export const useGeminiLive = () => {
                 if(Math.abs(inputData[i]) > maxVal) maxVal = Math.abs(inputData[i]);
               }
 
-              // Only send audio if there is a signal to conserve bandwidth
               if (maxVal > 0.005) {
                 const pcmBlob = createPcmBlob(inputData);
-                // CRITICAL: Solely rely on sessionPromise resolves to send realtime input
                 sessionPromise.then((session) => {
                   session.sendRealtimeInput({ media: pcmBlob });
                 });
@@ -108,7 +111,6 @@ export const useGeminiLive = () => {
             if (base64Audio && outputContextRef.current) {
               setIsSpeaking(true);
               const ctx = outputContextRef.current;
-              // Schedule playback in a gapless queue
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
               
               const audioBytes = decodeBase64(base64Audio);
@@ -139,11 +141,15 @@ export const useGeminiLive = () => {
           },
           onerror: (err: any) => {
             console.error('Session error:', err);
-            let msg = err?.message || "ERR_SESSION_DROP";
-            if (msg.includes("403")) msg = "ERR_API_RESTRICTED";
-            if (msg.includes("401")) msg = "ERR_KEY_INVALID";
-            // Map specific error for key selection reset as per guidelines
-            if (msg.toLowerCase().includes("requested entity was not found")) msg = "ERR_NOT_FOUND";
+            const rawMsg = err?.message || "";
+            let msg = "ERR_SESSION_DROP";
+            
+            if (rawMsg.includes("403")) msg = "ERR_API_RESTRICTED";
+            else if (rawMsg.includes("401")) msg = "ERR_KEY_INVALID";
+            else if (rawMsg.toLowerCase().includes("requested entity was not found")) msg = "ERR_NOT_FOUND";
+            else if (rawMsg.toLowerCase().includes("quota")) msg = "ERR_QUOTA_EXCEEDED";
+            else if (rawMsg.toLowerCase().includes("safety")) msg = "ERR_SAFETY_FILTER";
+            
             setError(msg);
             cleanup();
           }
@@ -160,7 +166,12 @@ export const useGeminiLive = () => {
       sessionPromiseRef.current = sessionPromise;
     } catch (err: any) {
       console.error('Connection failure:', err);
-      setError(err.message || "HARDWARE_FAILURE");
+      const rawMsg = err.message || "";
+      if (rawMsg.includes("Permission denied") || rawMsg.includes("device not found")) {
+        setError("ERR_HARDWARE_ACCESS");
+      } else {
+        setError("ERR_LINK_FAILURE");
+      }
       cleanup();
     }
   }, [cleanup]);
