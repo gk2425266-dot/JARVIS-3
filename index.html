@@ -58,7 +58,11 @@
         animation: pulse-soft 2s infinite ease-in-out;
       }
     </style>
-    <script>window.process = { env: {} };</script>
+    <script>
+      // Safely initialize process.env without wiping existing keys
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+    </script>
     <script type="importmap">
 {
   "imports": {

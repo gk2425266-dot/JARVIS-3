@@ -1,18 +1,13 @@
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { MODEL_NAME, SYSTEM_INSTRUCTION } from '../constants.ts';
 import { createPcmBlob, decodeBase64, decodeAudioData } from '../utils/audio.ts';
 
-export interface SearchSource {
-  uri: string;
-  title: string;
-}
-
 export const useGeminiLive = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchSources, setSearchSources] = useState<SearchSource[]>([]);
   
   const inputContextRef = useRef<AudioContext | null>(null);
   const outputContextRef = useRef<AudioContext | null>(null);
@@ -25,7 +20,7 @@ export const useGeminiLive = () => {
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
 
   const cleanup = useCallback(() => {
-    console.log("Severing JARVIS neural link...");
+    console.log("Shutting down link...");
     if (processorRef.current) {
         processorRef.current.disconnect();
         processorRef.current = null;
@@ -53,18 +48,14 @@ export const useGeminiLive = () => {
     
     setIsConnected(false);
     setIsSpeaking(false);
-    setSearchSources([]);
   }, []);
 
   const connect = useCallback(async () => {
     try {
       setError(null);
-      setSearchSources([]);
       
-      const apiKey = process.env.API_KEY;
-      if (!apiKey) throw new Error("ERR_AUTH_MISSING");
-
-      const ai = new GoogleGenAI({ apiKey });
+      // Initialize AI right before connection using process.env.API_KEY directly as per SDK guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       inputContextRef.current = new AudioCtx({ sampleRate: 16000 });
@@ -83,7 +74,7 @@ export const useGeminiLive = () => {
         model: MODEL_NAME,
         callbacks: {
           onopen: () => {
-            console.log("Live Uplink Online.");
+            console.log("Handshake successful.");
             setIsConnected(true);
             if (!inputContextRef.current || !streamRef.current) return;
             
@@ -94,15 +85,15 @@ export const useGeminiLive = () => {
             
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
-              
-              // Neural Noise Gate (Filter silence)
               let maxVal = 0;
               for(let i=0; i<inputData.length; i++) {
                 if(Math.abs(inputData[i]) > maxVal) maxVal = Math.abs(inputData[i]);
               }
 
+              // Only send audio if there is a signal to conserve bandwidth
               if (maxVal > 0.005) {
                 const pcmBlob = createPcmBlob(inputData);
+                // CRITICAL: Solely rely on sessionPromise resolves to send realtime input
                 sessionPromise.then((session) => {
                   session.sendRealtimeInput({ media: pcmBlob });
                 });
@@ -117,6 +108,7 @@ export const useGeminiLive = () => {
             if (base64Audio && outputContextRef.current) {
               setIsSpeaking(true);
               const ctx = outputContextRef.current;
+              // Schedule playback in a gapless queue
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
               
               const audioBytes = decodeBase64(base64Audio);
@@ -142,26 +134,22 @@ export const useGeminiLive = () => {
             }
           },
           onclose: (e) => {
-            console.warn("Server connection severed.", e);
+            console.warn("Server closed connection", e);
             cleanup();
           },
           onerror: (err: any) => {
-            console.error('Session dropped:', err);
-            // Parse error for user display
-            let msg = "PROTOCOL_TIMEOUT";
-            if (err?.message) msg = err.message;
-            else if (typeof err === 'string') msg = err;
-            
+            console.error('Session error:', err);
+            let msg = err?.message || "ERR_SESSION_DROP";
             if (msg.includes("403")) msg = "ERR_API_RESTRICTED";
             if (msg.includes("401")) msg = "ERR_KEY_INVALID";
-            
+            // Map specific error for key selection reset as per guidelines
+            if (msg.toLowerCase().includes("requested entity was not found")) msg = "ERR_NOT_FOUND";
             setError(msg);
             cleanup();
           }
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          // Note: googleSearch tool is currently excluded for stability in Live Native Audio protocol
           thinkingConfig: { thinkingBudget: 0 },
           speechConfig: { 
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } 
@@ -171,11 +159,11 @@ export const useGeminiLive = () => {
       });
       sessionPromiseRef.current = sessionPromise;
     } catch (err: any) {
-      console.error('Initialization error:', err);
+      console.error('Connection failure:', err);
       setError(err.message || "HARDWARE_FAILURE");
       cleanup();
     }
   }, [cleanup]);
 
-  return { connect, disconnect: cleanup, isConnected, isSpeaking, searchSources, error };
+  return { connect, disconnect: cleanup, isConnected, isSpeaking, error };
 };
