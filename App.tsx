@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Mic, MicOff, Power, Terminal, AlertTriangle, ShieldCheck, Share2, RefreshCw, Lock } from 'lucide-react';
-import Orb from './components/Orb';
-import { useGeminiLive } from './hooks/useGeminiLive';
-import { useAmbientSound } from './hooks/useAmbientSound';
-import { AppState } from './types';
-import { PERMISSION_PROMPT } from './constants';
+import { Mic, MicOff, Power, Terminal, AlertTriangle, ShieldCheck, Share2, RefreshCw, Lock, ExternalLink, Search, Zap, ShieldAlert, WifiOff, Globe, Database } from 'lucide-react';
+import Orb from './components/Orb.tsx';
+import { useGeminiLive } from './hooks/useGeminiLive.ts';
+import { useAmbientSound } from './hooks/useAmbientSound.ts';
+import { AppState } from './types.ts';
+import { PERMISSION_PROMPT } from './constants.ts';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
-  const { connect, disconnect, isConnected, isSpeaking, error } = useGeminiLive();
+  const { connect, disconnect, isConnected, isSpeaking, error, searchSources } = useGeminiLive();
   const [logs, setLogs] = useState<string[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
 
-  // Initialize Ambient Sound
   useAmbientSound(appState === AppState.LISTENING);
 
   const addLog = (msg: string) => {
@@ -20,58 +20,56 @@ const App: React.FC = () => {
 
   useEffect(() => {
     addLog("Environment: Secure");
-    addLog("System: Ready for initialization.");
+    addLog("Network: Vercel Edge Node Synced");
+    addLog("Model: Gemini 3 Flash Hybrid");
     addLog("Developer: MR. ANSH RAJ");
   }, []);
 
   useEffect(() => {
     if (isConnected) {
       setAppState(AppState.LISTENING);
-      addLog("J.A.R.V.I.S. Connected.");
+      addLog("J.A.R.V.I.S. Uplink Active");
     } else if (appState === AppState.LISTENING) {
        setAppState(AppState.IDLE);
-       addLog("Connection lost.");
+       addLog("System Dormant.");
     }
   }, [isConnected]);
 
   useEffect(() => {
     if (error) {
       setAppState(AppState.ERROR);
-      if (error === "MIC_ACCESS_DENIED") {
-        addLog("CRITICAL: Bio-metric (Audio) Access Denied.");
-      } else if (error === "API_KEY_MISSING") {
-        addLog("CRITICAL: Secure Key missing from environment.");
-      } else {
-        addLog(`ERROR: ${error}`);
-      }
+      addLog(`PROTOCOL_FAILURE: ${error}`);
     }
   }, [error]);
+
+  useEffect(() => {
+    if (searchSources.length > 0) {
+      setIsScanning(true);
+      addLog(`GROUNDING: ${searchSources.length} external nodes synced.`);
+      const timer = setTimeout(() => setIsScanning(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchSources.length]);
 
   const speakSystemMessage = useCallback((text: string, onEnd?: () => void) => {
     const utterance = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
     const systemVoice = voices.find(v => v.name.includes('Male') || v.name.includes('Google US English')) || voices[0];
     if (systemVoice) utterance.voice = systemVoice;
-    utterance.pitch = 0.9;
-    utterance.rate = 1.0;
-    
-    utterance.onend = () => {
-        if (onEnd) onEnd();
-    };
-    
+    utterance.pitch = 0.85;
+    utterance.rate = 1.1; 
+    utterance.onend = () => onEnd?.();
     window.speechSynthesis.speak(utterance);
   }, []);
 
   const handleInitialize = () => {
     setAppState(AppState.REQUESTING_PERMISSION);
-    addLog("Initializing authentication protocol...");
-    setTimeout(() => {
-        speakSystemMessage(PERMISSION_PROMPT);
-    }, 500);
+    addLog("Requesting biometric clearance...");
+    setTimeout(() => speakSystemMessage(PERMISSION_PROMPT), 300);
   };
 
   const handlePermissionGranted = () => {
-    addLog("Permission granted. Accessing audio hardware...");
+    addLog("Authorization acknowledged.");
     window.speechSynthesis.cancel(); 
     connect();
   };
@@ -80,173 +78,172 @@ const App: React.FC = () => {
     disconnect();
     window.speechSynthesis.cancel();
     setAppState(AppState.IDLE);
-    addLog("System shutting down...");
-  };
-
-  const handleShare = async () => {
-    try {
-        await navigator.clipboard.writeText(window.location.href);
-        addLog("LINK COPIED TO CLIPBOARD");
-    } catch (e) {
-        addLog("SHARE FAILED");
-    }
+    addLog("Uplink severed.");
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center overflow-hidden relative selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center overflow-hidden relative selection:bg-cyan-500/30 font-mono">
       
-      {/* Background Grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.05)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
-      <div className="absolute inset-0 bg-radial-gradient from-transparent to-black"></div>
+      {/* Dynamic Background */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.03)_1px,transparent_1px)] bg-[size:40px_40px]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.05)_0%,transparent_70%)]"></div>
 
-      {/* Header */}
-      <div className="absolute top-8 left-0 right-0 flex justify-between px-8 items-center z-10">
-        <div className="flex items-center gap-2">
-            <Terminal className="text-cyan-500 w-6 h-6" />
-            <h1 className="text-2xl font-bold tracking-widest text-cyan-500 font-mono">J.A.R.V.I.S.</h1>
-        </div>
-        <div className="flex items-center gap-4">
-            <button 
-                onClick={handleShare}
-                className="text-cyan-700 hover:text-cyan-400 transition-colors"
-                title="Copy Link"
-            >
-                <Share2 className="w-5 h-5" />
-            </button>
-            <div className="text-xs text-cyan-700 font-mono hidden sm:block">
-                V.3.5.0 // DEPLOYED_NETLIFY
+      {/* Top HUD */}
+      <div className="absolute top-8 left-0 right-0 flex justify-between px-10 items-start z-10">
+        <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+                <Terminal className="text-cyan-500 w-5 h-5" />
+                <h1 className="text-xl font-bold tracking-[0.2em] text-cyan-500">J.A.R.V.I.S. <span className="text-[10px] font-normal opacity-50 underline">OS_CORE</span></h1>
             </div>
+            <div className="text-[10px] text-cyan-700/60 uppercase tracking-widest pl-7">Advanced Intelligence Protocol</div>
+        </div>
+        
+        <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2 text-[10px] bg-cyan-950/20 border border-cyan-500/30 px-3 py-1.5 rounded-sm text-cyan-400">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-cyan-400 animate-pulse' : 'bg-red-500'}`}></div>
+                {isConnected ? 'LIVE_UPLINK' : 'OFFLINE'} // NODE_VERCEL
+            </div>
+            {isScanning && (
+                <div className="flex items-center gap-2 text-[9px] text-cyan-400 animate-pulse">
+                    <Globe className="w-3 h-3" /> SCANNING_GLOBAL_NETWORKS...
+                </div>
+            )}
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="z-10 flex flex-col items-center gap-12 w-full max-w-2xl px-4">
+      {/* Main Interface */}
+      <div className="z-10 flex flex-col lg:flex-row items-center justify-center gap-16 w-full max-w-7xl px-10">
         
-        {/* The Core */}
-        <div className="transform scale-100 md:scale-125 transition-transform">
-             <Orb 
-                isActive={appState !== AppState.IDLE && appState !== AppState.ERROR}
-                isSpeaking={isSpeaking}
-                state={appState === AppState.REQUESTING_PERMISSION ? 'WAITING' : isConnected ? 'LISTENING' : 'IDLE'}
-             />
-        </div>
+        {/* Core AI Section */}
+        <div className="flex flex-col items-center gap-10 w-full lg:w-1/2">
+            <div className="relative group">
+                {/* Decorative Hexagon/Circle elements */}
+                <div className="absolute -inset-8 border border-cyan-500/10 rounded-full animate-[spin_15s_linear_infinite]"></div>
+                <div className="absolute -inset-12 border border-cyan-500/5 rounded-full animate-[spin_20s_linear_infinite_reverse]"></div>
+                
+                <Orb 
+                    isActive={appState !== AppState.IDLE && appState !== AppState.ERROR}
+                    isSpeaking={isSpeaking}
+                    state={appState === AppState.REQUESTING_PERMISSION ? 'WAITING' : isConnected ? 'LISTENING' : 'IDLE'}
+                 />
+            </div>
 
-        {/* Interaction Area */}
-        <div className="w-full flex flex-col items-center gap-6 min-h-[180px]">
-            
-            {appState === AppState.IDLE && (
-                <button 
-                    onClick={handleInitialize}
-                    className="group relative px-8 py-3 bg-cyan-950/30 border border-cyan-500/50 text-cyan-400 font-bold tracking-widest hover:bg-cyan-500 hover:text-black transition-all duration-300 uppercase"
-                    style={{ clipPath: 'polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%)' }}
-                >
-                    <span className="flex items-center gap-2">
-                        <Power className="w-4 h-4" /> Initialize System
-                    </span>
-                    <div className="absolute inset-0 border border-cyan-500/20 scale-105 opacity-0 group-hover:scale-110 group-hover:opacity-100 transition-all"></div>
-                </button>
-            )}
-
-            {appState === AppState.REQUESTING_PERMISSION && (
-                <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <p className="text-cyan-100 text-lg text-center max-w-md bg-black/50 p-4 border-l-2 border-cyan-500 italic">
-                        "{PERMISSION_PROMPT}"
-                    </p>
-                    <div className="flex gap-4">
-                         <button 
-                            onClick={handlePermissionGranted}
-                            className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-black font-bold uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(6,182,212,0.4)]"
-                        >
-                            Authorize
-                        </button>
-                        <button 
-                            onClick={() => {
-                                setAppState(AppState.IDLE);
-                                addLog("Permission denied.");
-                            }}
-                            className="px-6 py-2 border border-red-500/50 text-red-400 hover:bg-red-950/30 font-bold uppercase tracking-wider transition-colors"
-                        >
-                            Abort
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {appState === AppState.LISTENING && (
-                <div className="flex flex-col items-center gap-4 animate-in fade-in">
-                    <div className="flex items-center gap-2 text-cyan-300 bg-cyan-950/20 px-4 py-2 rounded-full border border-cyan-500/20 animate-pulse">
-                        <Mic className="w-4 h-4" />
-                        <span className="text-xs uppercase tracking-widest">Live Bio-Feed Active</span>
-                    </div>
+            <div className="w-full flex flex-col items-center gap-8 min-h-[140px]">
+                {appState === AppState.IDLE && (
                     <button 
-                        onClick={handleShutdown}
-                        className="text-xs text-red-500 hover:text-red-400 hover:underline uppercase tracking-widest mt-4 flex items-center gap-1"
+                        onClick={handleInitialize}
+                        className="relative group px-12 py-4 bg-transparent border border-cyan-500/40 text-cyan-400 font-bold tracking-[0.4em] hover:bg-cyan-500 hover:text-black transition-all duration-500 uppercase overflow-hidden"
                     >
-                        <Power className="w-3 h-3" /> Deactivate Protocol
+                        <div className="absolute inset-0 bg-cyan-500/10 group-hover:bg-cyan-500 transition-colors"></div>
+                        <span className="relative flex items-center gap-3">
+                            <Power className="w-4 h-4" /> System Initiation
+                        </span>
                     </button>
-                </div>
-            )}
+                )}
 
-            {appState === AppState.ERROR && (
-                <div className="flex flex-col items-center gap-4 w-full animate-in zoom-in duration-300">
-                    {error === "MIC_ACCESS_DENIED" ? (
-                        <div className="bg-red-950/20 border border-red-500/40 p-6 rounded-lg max-w-md w-full backdrop-blur-md">
-                            <div className="flex items-center gap-3 text-red-500 mb-4">
-                                <MicOff className="w-6 h-6" />
-                                <h3 className="text-lg font-bold tracking-wider uppercase">Microphone Access Denied</h3>
-                            </div>
-                            <div className="space-y-3 text-red-200/80 text-sm font-mono leading-relaxed">
-                                <p className="flex gap-2"><span className="text-red-500">01.</span> Click the <Lock className="inline w-3 h-3 mx-1 text-cyan-400" /> icon in your browser address bar.</p>
-                                <p className="flex gap-2"><span className="text-red-500">02.</span> Toggle 'Microphone' to <span className="text-cyan-400">ON</span>.</p>
-                                <p className="flex gap-2"><span className="text-red-500">03.</span> Reload the interface to re-establish secure link.</p>
-                            </div>
-                            <button 
-                                onClick={() => window.location.reload()}
-                                className="mt-6 w-full py-2 bg-red-600 hover:bg-red-500 text-white font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                {appState === AppState.REQUESTING_PERMISSION && (
+                    <div className="flex flex-col items-center gap-6 animate-in zoom-in duration-300">
+                        <p className="text-cyan-100/60 text-center max-w-sm text-[11px] leading-relaxed uppercase tracking-widest border-x border-cyan-500/20 px-4">
+                            "{PERMISSION_PROMPT}"
+                        </p>
+                        <div className="flex gap-6">
+                             <button 
+                                onClick={handlePermissionGranted}
+                                className="px-10 py-2 bg-cyan-500 text-black font-bold uppercase tracking-[0.2em] text-xs hover:bg-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.4)]"
                             >
-                                <RefreshCw className="w-4 h-4" /> Reload System
+                                Confirm
                             </button>
-                        </div>
-                    ) : error === "API_KEY_MISSING" ? (
-                         <div className="bg-red-950/20 border border-red-500/40 p-6 rounded-lg max-w-md w-full backdrop-blur-md text-center">
-                            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                            <h3 className="text-lg font-bold text-red-500 uppercase mb-2">Secure Key Missing</h3>
-                            <p className="text-red-200/60 text-xs font-mono mb-4 leading-relaxed">
-                                J.A.R.V.I.S. requires an API_KEY environment variable. 
-                                Set it in Netlify: Site Settings > Environment Variables.
-                            </p>
                             <button 
                                 onClick={() => setAppState(AppState.IDLE)}
-                                className="px-6 py-2 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-all uppercase text-xs font-bold"
+                                className="px-10 py-2 border border-red-500/30 text-red-400 hover:bg-red-500/10 font-bold uppercase tracking-[0.2em] text-xs transition-all"
                             >
-                                Re-verify
+                                Abort
                             </button>
                         </div>
-                    ) : (
-                        <div className="text-red-500 flex flex-col items-center gap-2">
-                            <AlertTriangle className="w-8 h-8" />
-                            <p className="text-center max-w-xs font-mono">{error}</p>
-                            <button 
-                                onClick={() => setAppState(AppState.IDLE)}
-                                className="mt-4 text-xs border border-red-500 px-4 py-2 hover:bg-red-900/20 uppercase tracking-widest"
-                            >
-                                Reset Protocol
-                            </button>
+                    </div>
+                )}
+
+                {appState === AppState.LISTENING && (
+                    <div className="flex flex-col items-center gap-5">
+                        <div className="flex flex-col items-center gap-2">
+                             <div className="flex gap-1">
+                                {[...Array(5)].map((_, i) => (
+                                    <div key={i} className="w-1 h-4 bg-cyan-500/30 animate-pulse" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                                ))}
+                             </div>
+                             <span className="text-[10px] text-cyan-500 uppercase tracking-[0.3em]">Neural Link Established</span>
                         </div>
-                    )}
+                        <button 
+                            onClick={handleShutdown}
+                            className="group flex items-center gap-2 text-[9px] text-red-500/60 hover:text-red-400 uppercase tracking-[0.2em] transition-colors border-b border-transparent hover:border-red-500/50 pb-1"
+                        >
+                            <Power className="w-3 h-3" /> Shutdown Sequence
+                        </button>
+                    </div>
+                )}
+            </div>
+            
+            {/* Terminal Feed */}
+            <div className="w-full max-w-md bg-cyan-950/5 border border-cyan-500/10 p-3 rounded-sm">
+                <div className="flex items-center gap-2 text-[9px] text-cyan-500/40 mb-2 border-b border-cyan-500/10 pb-1">
+                    <Database className="w-3 h-3" /> SYSTEM_LOG_STREAM
                 </div>
-            )}
+                <div className="h-20 flex flex-col justify-end gap-1">
+                    {logs.map((log, i) => (
+                        <div key={i} className="text-[10px] text-cyan-400/80 truncate font-mono flex gap-2">
+                            <span className="opacity-30">[{new Date().toLocaleTimeString([], {hour12: false})}]</span>
+                            {log}
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
 
-        {/* System Logs */}
-        <div className="w-full max-w-md font-mono text-[10px] md:text-xs text-cyan-700/60 mt-8 space-y-1 h-24 flex flex-col justify-end border-t border-cyan-900/30 pt-4">
-            {logs.map((log, i) => (
-                <div key={i} className={`animate-pulse ${log.includes('CRITICAL') ? 'text-red-500/80' : ''}`}>
-                    {log}
+        {/* Intelligence Hub (Search Results) */}
+        <div className={`w-full lg:w-1/3 flex flex-col gap-4 transition-all duration-700 ${searchSources.length > 0 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-10 pointer-events-none'}`}>
+            <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
+                <div className="flex items-center gap-2 text-cyan-400">
+                    <Globe className="w-4 h-4" />
+                    <h2 className="text-xs font-bold uppercase tracking-[0.2em]">Intelligence Grounding</h2>
                 </div>
-            ))}
+                <div className="text-[8px] text-cyan-700 font-bold uppercase tracking-widest bg-cyan-500/5 px-2 py-0.5 rounded border border-cyan-500/10">
+                    G-SEARCH_ENABLED
+                </div>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-3 overflow-y-auto max-h-[450px] pr-2 custom-scrollbar">
+                {searchSources.map((source, index) => (
+                    <a 
+                        key={index}
+                        href={source.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group relative p-4 bg-cyan-950/10 border border-cyan-500/10 hover:border-cyan-400/60 transition-all duration-300 scanner-effect"
+                    >
+                        <div className="flex justify-between items-start mb-1">
+                            <h3 className="text-[11px] font-bold text-cyan-100 group-hover:text-cyan-400 transition-colors uppercase leading-tight pr-4">
+                                {source.title}
+                            </h3>
+                            <ExternalLink className="w-3 h-3 text-cyan-800 group-hover:text-cyan-400" />
+                        </div>
+                        <div className="text-[8px] text-cyan-700 truncate font-mono group-hover:text-cyan-600 transition-colors">
+                            {source.uri}
+                        </div>
+                        <div className="mt-2 flex items-center gap-1">
+                            <div className="w-1 h-1 rounded-full bg-cyan-500/50"></div>
+                            <span className="text-[7px] text-cyan-900 uppercase tracking-widest">Verified External Node</span>
+                        </div>
+                    </a>
+                ))}
+            </div>
         </div>
 
+      </div>
+
+      {/* Footer Branding */}
+      <div className="absolute bottom-6 flex flex-col items-center gap-1 opacity-20 hover:opacity-100 transition-opacity duration-500 group">
+        <div className="h-[1px] w-20 bg-cyan-500/30 group-hover:w-40 transition-all"></div>
+        <div className="text-[9px] tracking-[0.4em] text-cyan-500">DEVELOPED BY MR. ANSH RAJ</div>
       </div>
     </div>
   );

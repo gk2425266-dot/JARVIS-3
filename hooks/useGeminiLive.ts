@@ -1,12 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { MODEL_NAME, SYSTEM_INSTRUCTION } from '../constants';
-import { createPcmBlob, decodeBase64, decodeAudioData } from '../utils/audio';
+import { MODEL_NAME, SYSTEM_INSTRUCTION } from '../constants.ts';
+import { createPcmBlob, decodeBase64, decodeAudioData } from '../utils/audio.ts';
+
+export interface SearchSource {
+  uri: string;
+  title: string;
+}
 
 export const useGeminiLive = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchSources, setSearchSources] = useState<SearchSource[]>([]);
   
   // Audio Contexts
   const inputContextRef = useRef<AudioContext | null>(null);
@@ -52,42 +58,43 @@ export const useGeminiLive = () => {
     
     setIsConnected(false);
     setIsSpeaking(false);
+    setSearchSources([]);
   }, []);
 
   const connect = useCallback(async () => {
     try {
       setError(null);
+      setSearchSources([]);
       
       const apiKey = process.env.API_KEY;
       if (!apiKey) {
-          throw new Error("API_KEY_MISSING");
+          throw new Error("ERR_AUTH_MISSING");
       }
 
-      // Initialize Google GenAI
+      // Create a fresh instance for the connection
       const ai = new GoogleGenAI({ apiKey });
       
-      // Setup Audio Contexts
       try {
         inputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
         outputContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       } catch (e) {
-        throw new Error("AUDIO_HARDWARE_FAILED");
+        throw new Error("ERR_HARDWARE_FAIL");
       }
       
-      // Setup Output Node
       const outputNode = outputContextRef.current.createGain();
       outputNode.connect(outputContextRef.current.destination);
 
-      // Get Microphone Stream
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         streamRef.current = stream;
       } catch (e) {
-        throw new Error("MIC_ACCESS_DENIED");
+        if (e instanceof Error && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError')) {
+           throw new Error("ERR_MIC_DENIED");
+        }
+        throw new Error("ERR_MIC_GENERAL");
       }
 
-      // Start Session
       const sessionPromise = ai.live.connect({
         model: MODEL_NAME,
         callbacks: {
@@ -95,13 +102,11 @@ export const useGeminiLive = () => {
             console.log('Gemini Live Session Opened');
             setIsConnected(true);
             
-            // Setup Input Processing
             if (!inputContextRef.current || !streamRef.current) return;
             
             const source = inputContextRef.current.createMediaStreamSource(streamRef.current);
             sourceRef.current = source;
             
-            // Use ScriptProcessor for raw PCM access (Worklet is better but more complex for single file structure)
             const processor = inputContextRef.current.createScriptProcessor(4096, 1, 1);
             processorRef.current = processor;
             
@@ -118,7 +123,23 @@ export const useGeminiLive = () => {
             processor.connect(inputContextRef.current.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output
+            const groundingMetadata = (message.serverContent as any)?.groundingMetadata;
+            if (groundingMetadata?.groundingChunks) {
+              const sources: SearchSource[] = groundingMetadata.groundingChunks
+                .filter((chunk: any) => chunk.web)
+                .map((chunk: any) => ({
+                  uri: chunk.web.uri,
+                  title: chunk.web.title || 'Source Link'
+                }));
+              
+              if (sources.length > 0) {
+                setSearchSources(prev => {
+                  const combined = [...prev, ...sources];
+                  return Array.from(new Map(combined.map(s => [s.uri, s])).values());
+                });
+              }
+            }
+
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             
             if (base64Audio && outputContextRef.current) {
@@ -150,7 +171,6 @@ export const useGeminiLive = () => {
               nextStartTimeRef.current += audioBuffer.duration;
             }
 
-            // Handle Interruption
             if (message.serverContent?.interrupted) {
               scheduledSourcesRef.current.forEach(s => {
                  try { s.stop(); } catch (e) {}
@@ -166,24 +186,22 @@ export const useGeminiLive = () => {
           },
           onerror: (err: any) => {
             console.error('Gemini Live Error', err);
-            let msg = "Connection error detected.";
-            
+            let msg = "ERR_SESSION_DROP";
             if (err instanceof Error) {
-                msg = err.message;
-                if (msg.includes("403")) msg = "Access Denied: Quota exceeded or location restricted.";
-                if (msg.includes("503")) msg = "Server Overload: Please retry shortly.";
-            } else if (err instanceof ErrorEvent) {
-                msg = "Network connection failed. Check your internet.";
+                if (err.message.includes("403")) msg = "ERR_QUOTA_EXCEEDED";
+                else if (err.message.includes("401")) msg = "ERR_AUTH_INVALID";
+                else msg = err.message;
             }
-            
             setError(msg);
             cleanup();
           }
         },
         config: {
           responseModalities: [Modality.AUDIO],
+          tools: [{ googleSearch: {} }],
+          thinkingConfig: { thinkingBudget: 0 }, // Optimized for zero-latency quick answers
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } // Fenrir sounds deeper/more jarvis-like
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } }
           },
           systemInstruction: SYSTEM_INSTRUCTION
         }
@@ -193,7 +211,7 @@ export const useGeminiLive = () => {
 
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Initialization Failed.");
+      setError(err.message || "ERR_INITIALIZATION");
       cleanup();
     }
   }, [cleanup]);
@@ -203,6 +221,7 @@ export const useGeminiLive = () => {
     disconnect: cleanup,
     isConnected,
     isSpeaking,
+    searchSources,
     error
   };
 };
