@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Power, Terminal, ShieldAlert, Database, Lock, ExternalLink, Globe, Key, ShieldCheck, HelpCircle, RefreshCw } from 'lucide-react';
+import { Power, Terminal, ShieldAlert, Database, Lock, ExternalLink, Key, ShieldCheck, HelpCircle, RefreshCw, ChevronRight } from 'lucide-react';
 import Orb from './components/Orb.tsx';
 import { useGeminiLive } from './hooks/useGeminiLive.ts';
 import { useAmbientSound } from './hooks/useAmbientSound.ts';
@@ -19,73 +19,76 @@ declare global {
   }
 }
 
-const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string; link?: string }> = {
+const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string; link?: string; vercelSteps?: string[] }> = {
   ERR_AUTH_MISSING: {
     title: "Security Credentials Missing",
-    detail: "J.A.R.V.I.S. core failed to locate the 'API_KEY' environment variable. When deploying to Vercel, this must be manually configured in your Project Settings. Note: The Gemini Live API strictly requires a 'Paid / Pay-as-you-go' billing plan in Google AI Studio. Free Tier keys will be rejected.",
-    action: "Configure API_KEY in Vercel Dashboard > Settings > Environment Variables and ensure your GCP project has billing enabled.",
-    link: "https://ai.google.dev/gemini-api/docs/billing"
+    detail: "J.A.R.V.I.S. core failed to locate the 'API_KEY'. On Vercel, environment variables are baked during build. If you added the key recently, you MUST trigger a new deployment for it to take effect.",
+    action: "Sync API_KEY in Vercel settings and trigger a redeploy.",
+    link: "https://ai.google.dev/gemini-api/docs/billing",
+    vercelSteps: [
+      "Vercel Dashboard > Project Settings > Env Vars",
+      "Add 'API_KEY' (Must match exactly)",
+      "Enable 'Production' & 'Preview' environments",
+      "Crucial: Go to 'Deployments' and click 'Redeploy'",
+      "Verify GCP project is 'Paid / Pay-as-you-go'"
+    ]
   },
   ERR_NETWORK_OR_AUTH: {
     title: "Neural Handshake Failed",
-    detail: "The uplink was rejected. This is typically caused by using a 'Free Tier' API key. Gemini Live API is restricted to 'Paid' (Pay-as-you-go) projects only.",
+    detail: "The uplink was rejected. This usually indicates a 'Free Tier' API key limit. Gemini Live API requires an active 'Paid' (Pay-as-you-go) billing status.",
     action: "Upgrade your Google AI Studio project to a billable plan.",
     link: "https://ai.google.dev/gemini-api/docs/billing"
   },
   ERR_SESSION_DROP: {
     title: "Uplink Synchronization Lost",
-    detail: "The real-time neural handshake was interrupted. This is frequently caused by high network latency, packet loss, or firewall restrictions interfering with the WebSocket stream.",
-    action: "Verify your internet stability, disable active VPNs, and trigger 'System Recovery' to attempt a manual re-link.",
+    detail: "The real-time neural handshake was interrupted. This is often caused by network instability or Vercel edge function timeouts.",
+    action: "Confirm network stability and trigger 'System Recovery'.",
   },
   ERR_KEY_INVALID: {
     title: "Invalid Token Detected",
-    detail: "The provided handshake token was rejected. It may be revoked or misconfigured.",
-    action: "Re-verify the API_KEY string in Vercel settings."
+    detail: "The handshake token provided was rejected. It may be expired or incorrectly copied into Vercel settings.",
+    action: "Re-verify the API_KEY string in your deployment dashboard."
   },
   ERR_NOT_FOUND: {
     title: "Resource Not Found",
-    detail: "The 'Gemini 2.5' model is unavailable for this project/key.",
+    detail: "The Gemini 2.5 model is unavailable for this key. Ensure your project has model access.",
     action: "Confirm model access in Google AI Studio."
   },
   ERR_QUOTA_EXCEEDED: {
     title: "Bandwidth Quota Exceeded",
     detail: "The neural link has hit its transmission limit.",
-    action: "Wait for reset or upgrade your API tier."
+    action: "Check billing status in Google Cloud Console."
   },
   ERR_HARDWARE_ACCESS: {
     title: "Hardware Interface Error",
-    detail: "Failed to access local audio input devices.",
-    action: "Grant microphone access in browser settings."
+    detail: "Microphone access denied or hardware not found.",
+    action: "Grant microphone permissions in browser."
   },
   ERR_SAFETY_FILTER: {
     title: "Safety Protocol Breach",
     detail: "Transmission blocked by automated safety filters.",
-    action: "Refine input parameters and re-link."
-  },
-  ERR_LINK_FAILURE: {
-    title: "Critical System Error",
-    detail: "An unexpected error occurred during system initialization.",
-    action: "Inspect terminal logs for diagnostic codes."
+    action: "Refine input parameters and re-initialize."
   }
 };
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [needsKey, setNeedsKey] = useState(false);
-  const { connect, disconnect, isConnected, isSpeaking, error } = useGeminiLive();
   const [logs, setLogs] = useState<string[]>([]);
 
-  useAmbientSound(appState === AppState.LISTENING);
-
-  const addLog = (msg: string) => {
+  const addLog = useCallback((msg: string) => {
     setLogs(prev => [...prev.slice(-4), `> ${msg}`]);
-  };
+  }, []);
+
+  const { connect, disconnect, isConnected, isSpeaking, error } = useGeminiLive(addLog);
+
+  useAmbientSound(appState === AppState.LISTENING);
 
   useEffect(() => {
     addLog("Environment: Secure");
     addLog("Neural Engine: Ready");
     addLog("Protocol: MR. ANSH RAJ");
-  }, []);
+  }, [addLog]);
 
   useEffect(() => {
     if (isConnected) {
@@ -96,7 +99,7 @@ const App: React.FC = () => {
        setAppState(AppState.IDLE);
        addLog("Link severed. Dormant.");
     }
-  }, [isConnected, appState]);
+  }, [isConnected, appState, addLog]);
 
   useEffect(() => {
     if (error) {
@@ -105,13 +108,13 @@ const App: React.FC = () => {
           setNeedsKey(true);
         } else {
           addLog(`CRITICAL_FAILURE: ${error}`);
-          addLog("HINT: Check Vercel Env Vars & Billing Tier.");
+          addLog("HINT: NEW DEPLOYMENT REQUIRED.");
         }
       }
       setAppState(AppState.ERROR);
       addLog(`ERR_STATE_ACTIVE: ${error.toUpperCase()}`);
     }
-  }, [error]);
+  }, [error, addLog]);
 
   const errorDetail = useMemo(() => {
     if (!error) return null;
@@ -138,7 +141,6 @@ const App: React.FC = () => {
     addLog("Initiating handshake...");
     addLog("Verifying auth environment...");
     
-    // Check if we are in AI Studio environment
     if (window.aistudio) {
       try {
         const hasKey = await window.aistudio.hasSelectedApiKey();
@@ -193,7 +195,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center overflow-hidden relative selection:bg-cyan-500/30 font-mono">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center overflow-hidden relative selection:bg-cyan-500/30 font-mono text-[#e0f7fa]">
       
       {/* HUD Background Overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.02)_1px,transparent_1px)] bg-[size:30px_30px]"></div>
@@ -326,7 +328,20 @@ const App: React.FC = () => {
                         <p className="text-[10px] text-red-100/60 leading-relaxed uppercase">
                           {errorDetail.detail}
                         </p>
-                        <div className="flex flex-col gap-2 p-2 bg-cyan-950/30 rounded border border-cyan-500/10">
+
+                        {errorDetail.vercelSteps && (
+                            <div className="mt-2 space-y-1.5 border-l-2 border-red-500/20 pl-4 bg-black/20 p-3 rounded">
+                                <span className="text-[9px] text-red-400 font-bold uppercase tracking-tighter block mb-2">Neural Link Sync Protocol:</span>
+                                {errorDetail.vercelSteps.map((step, idx) => (
+                                    <div key={idx} className="flex items-start gap-2 text-[9px] text-red-100/60">
+                                        <ChevronRight className="w-2.5 h-2.5 shrink-0 mt-0.5 text-red-500" />
+                                        <span>{step}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-2 p-2 bg-cyan-950/30 rounded border border-cyan-500/10 mt-3">
                             <div className="flex items-center gap-2 text-[9px] text-cyan-400">
                                 <HelpCircle className="w-3 h-3 shrink-0" />
                                 <span>SUGGESTION: {errorDetail.action}</span>

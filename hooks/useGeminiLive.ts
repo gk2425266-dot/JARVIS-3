@@ -4,7 +4,7 @@ import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { MODEL_NAME, SYSTEM_INSTRUCTION } from '../constants.ts';
 import { createPcmBlob, decodeBase64, decodeAudioData } from '../utils/audio.ts';
 
-export const useGeminiLive = () => {
+export const useGeminiLive = (onLog?: (msg: string) => void) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export const useGeminiLive = () => {
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
 
   const cleanup = useCallback(() => {
-    console.log("Shutting down link...");
+    if (onLog) onLog("Link termination sequence complete.");
     if (processorRef.current) {
         processorRef.current.disconnect();
         processorRef.current = null;
@@ -48,22 +48,21 @@ export const useGeminiLive = () => {
     
     setIsConnected(false);
     setIsSpeaking(false);
-  }, []);
+  }, [onLog]);
 
   const connect = useCallback(async () => {
     try {
       setError(null);
+      if (onLog) onLog("Attempting neural handshake...");
       
       const apiKey = process.env.API_KEY;
       
-      // If we are not in AI Studio and no key is found, we can't initialize the client
       if (!apiKey && !window.aistudio) {
+        if (onLog) onLog("CRITICAL: API_KEY not found in environment.");
         setError("ERR_AUTH_MISSING");
         return;
       }
 
-      // Initialize the SDK. We use an empty string as fallback to let the SDK 
-      // handle the missing key error if our local checks are bypassed.
       const ai = new GoogleGenAI({ apiKey: apiKey || "" });
       
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -83,7 +82,7 @@ export const useGeminiLive = () => {
         model: MODEL_NAME,
         callbacks: {
           onopen: () => {
-            console.log("Handshake successful.");
+            if (onLog) onLog("Link established. Systems online.");
             setIsConnected(true);
             if (!inputContextRef.current || !streamRef.current) return;
             
@@ -140,16 +139,15 @@ export const useGeminiLive = () => {
             }
           },
           onclose: (e) => {
-            console.warn("Server closed connection", e);
+            if (onLog) onLog("Uplink closed by remote host.");
             cleanup();
           },
           onerror: (err: any) => {
             console.error('Session error:', err);
             const rawMsg = err?.message || String(err) || "";
-            let msg = "ERR_SESSION_DROP";
+            if (onLog) onLog(`BREACH_CODE: ${rawMsg.substring(0, 40)}`);
             
-            // "Network error" is common when billing isn't enabled for the API key 
-            // or if the key is invalid in a way that prevents the socket handshake.
+            let msg = "ERR_SESSION_DROP";
             if (rawMsg.includes("Network error") || rawMsg.includes("401") || rawMsg.includes("403")) {
               msg = "ERR_NETWORK_OR_AUTH";
             } else if (rawMsg.toLowerCase().includes("requested entity was not found")) {
@@ -184,7 +182,7 @@ export const useGeminiLive = () => {
       }
       cleanup();
     }
-  }, [cleanup]);
+  }, [cleanup, onLog]);
 
   return { connect, disconnect: cleanup, isConnected, isSpeaking, error };
 };
