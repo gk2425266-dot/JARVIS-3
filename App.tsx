@@ -22,8 +22,13 @@ declare global {
 const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string }> = {
   ERR_AUTH_MISSING: {
     title: "Security Credentials Missing",
-    detail: "The system core is lacking an authentication token. Check deployment environment variables.",
-    action: "Re-verify API_KEY configuration."
+    detail: "The system core is lacking an authentication token. Handshake cannot be initiated without an API_KEY.",
+    action: "Add API_KEY to Vercel Environment Variables (Settings > Environment Variables)."
+  },
+  ERR_NETWORK_OR_AUTH: {
+    title: "Handshake Protocol Failure",
+    detail: "A low-level network error occurred. This often means the API key is not from a PAID (Pay-as-you-go) tier project, which is required for Live API.",
+    action: "Ensure your API key is from a billable GCP project."
   },
   ERR_KEY_INVALID: {
     title: "Invalid Token Detected",
@@ -93,11 +98,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      if (error === "ERR_AUTH_MISSING" || error === "ERR_KEY_INVALID" || error === "ERR_NOT_FOUND") {
+      if (error === "ERR_AUTH_MISSING" || error === "ERR_KEY_INVALID" || error === "ERR_NOT_FOUND" || error === "ERR_NETWORK_OR_AUTH") {
         if (window.aistudio) {
           setNeedsKey(true);
         } else {
-          addLog("CRITICAL: Authentication hardware missing on host.");
+          addLog("CRITICAL: Authentication hardware missing.");
+          addLog("HINT: Set API_KEY in Vercel settings.");
         }
       }
       setAppState(AppState.ERROR);
@@ -126,6 +132,16 @@ const App: React.FC = () => {
   }, []);
 
   const handleInitialize = async () => {
+    const apiKey = process.env.API_KEY;
+    
+    // If we're on Vercel without a key, show error immediately to guide setup
+    if (!apiKey && !window.aistudio) {
+      setAppState(AppState.ERROR);
+      addLog("INIT_FAILED: Missing API_KEY.");
+      addLog("DEPLOYMENT_HINT: Check Vercel Environment Variables.");
+      return;
+    }
+
     setAppState(AppState.REQUESTING_PERMISSION);
     addLog("Initiating handshake...");
     
