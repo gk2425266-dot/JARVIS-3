@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Power, Terminal, ShieldAlert, Database, Lock, ExternalLink, Globe, Key, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Power, Terminal, ShieldAlert, Database, Lock, ExternalLink, Globe, Key, ShieldCheck, HelpCircle, RefreshCw } from 'lucide-react';
 import Orb from './components/Orb.tsx';
 import { useGeminiLive } from './hooks/useGeminiLive.ts';
 import { useAmbientSound } from './hooks/useAmbientSound.ts';
@@ -19,51 +19,53 @@ declare global {
   }
 }
 
-const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string }> = {
+const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string; link?: string }> = {
   ERR_AUTH_MISSING: {
     title: "Security Credentials Missing",
-    detail: "The system core is lacking an authentication token. Handshake cannot be initiated without an API_KEY.",
-    action: "Add API_KEY to Vercel Environment Variables (Settings > Environment Variables)."
+    detail: "J.A.R.V.I.S. core detected a missing 'API_KEY'. This environment variable must be explicitly defined in your Vercel Project Settings for cloud-based deployment. Additionally, the Gemini Live API strictly requires an active 'Pay-as-you-go' (Paid) billing account.",
+    action: "Add the 'API_KEY' variable in Vercel Dashboard > Settings > Environment Variables. Ensure your project is on a billable plan in Google AI Studio.",
+    link: "https://vercel.com/docs/projects/environment-variables"
   },
   ERR_NETWORK_OR_AUTH: {
-    title: "Handshake Protocol Failure",
-    detail: "A low-level network error occurred. This often means the API key is not from a PAID (Pay-as-you-go) tier project, which is required for Live API.",
-    action: "Ensure your API key is from a billable GCP project."
+    title: "Neural Handshake Failed",
+    detail: "The uplink was rejected. This is typically caused by using a 'Free Tier' API key. Gemini Live API is restricted to 'Paid' (Pay-as-you-go) projects only.",
+    action: "Upgrade your Google AI Studio project to a billable plan.",
+    link: "https://ai.google.dev/gemini-api/docs/billing"
+  },
+  ERR_SESSION_DROP: {
+    title: "Uplink Synchronization Lost",
+    detail: "The real-time neural handshake was interrupted. This is frequently caused by high latency, packet loss, or firewall restrictions on your current network environment.",
+    action: "Confirm network stability, disable any active VPNs, and attempt to re-establish the connection via the 'System Recovery' protocol.",
   },
   ERR_KEY_INVALID: {
     title: "Invalid Token Detected",
-    detail: "The provided handshake token was rejected by the neural server. It may be expired or revoked.",
-    action: "Update API credentials in system settings."
+    detail: "The provided handshake token was rejected. It may be revoked or misconfigured.",
+    action: "Re-verify the API_KEY string in Vercel settings."
   },
   ERR_NOT_FOUND: {
     title: "Resource Not Found",
-    detail: "The requested model 'Gemini 2.5' or specific resource is unavailable for this project.",
-    action: "Check project permissions or select a different key."
+    detail: "The 'Gemini 2.5' model is unavailable for this project/key.",
+    action: "Confirm model access in Google AI Studio."
   },
   ERR_QUOTA_EXCEEDED: {
     title: "Bandwidth Quota Exceeded",
-    detail: "The neural link has hit its transmission limit for this period.",
-    action: "Await system cool-down or upgrade plan."
+    detail: "The neural link has hit its transmission limit.",
+    action: "Wait for reset or upgrade your API tier."
   },
   ERR_HARDWARE_ACCESS: {
     title: "Hardware Interface Error",
-    detail: "Failed to establish a link with the local audio input devices.",
-    action: "Grant microphone permissions in browser."
-  },
-  ERR_SESSION_DROP: {
-    title: "Uplink Interrupted",
-    detail: "The connection to the server was severed unexpectedly.",
-    action: "Check network stability and retry."
+    detail: "Failed to access local audio input devices.",
+    action: "Grant microphone access in browser settings."
   },
   ERR_SAFETY_FILTER: {
     title: "Safety Protocol Breach",
-    detail: "The last transmission triggered automated safety filters.",
-    action: "Refine input parameters and attempt re-link."
+    detail: "Transmission blocked by automated safety filters.",
+    action: "Refine input parameters and re-link."
   },
   ERR_LINK_FAILURE: {
-    title: "Neural Handshake Failure",
-    detail: "A critical error occurred during the system initialization phase.",
-    action: "Inspect terminal logs for diagnostic data."
+    title: "Critical System Error",
+    detail: "An unexpected error occurred during system initialization.",
+    action: "Inspect terminal logs for diagnostic codes."
   }
 };
 
@@ -102,12 +104,12 @@ const App: React.FC = () => {
         if (window.aistudio) {
           setNeedsKey(true);
         } else {
-          addLog("CRITICAL: Authentication hardware missing.");
-          addLog("HINT: Set API_KEY in Vercel settings.");
+          addLog(`CRITICAL_FAILURE: ${error}`);
+          addLog("HINT: Check Vercel Env Vars & Billing Tier.");
         }
       }
       setAppState(AppState.ERROR);
-      addLog(`ERR: ${error.toUpperCase()}`);
+      addLog(`ERR_STATE_ACTIVE: ${error.toUpperCase()}`);
     }
   }, [error]);
 
@@ -132,19 +134,11 @@ const App: React.FC = () => {
   }, []);
 
   const handleInitialize = async () => {
-    const apiKey = process.env.API_KEY;
-    
-    // If we're on Vercel without a key, show error immediately to guide setup
-    if (!apiKey && !window.aistudio) {
-      setAppState(AppState.ERROR);
-      addLog("INIT_FAILED: Missing API_KEY.");
-      addLog("DEPLOYMENT_HINT: Check Vercel Environment Variables.");
-      return;
-    }
-
     setAppState(AppState.REQUESTING_PERMISSION);
     addLog("Initiating handshake...");
+    addLog("Verifying auth environment...");
     
+    // Check if we are in AI Studio environment
     if (window.aistudio) {
       try {
         const hasKey = await window.aistudio.hasSelectedApiKey();
@@ -332,16 +326,28 @@ const App: React.FC = () => {
                         <p className="text-[10px] text-red-100/60 leading-relaxed uppercase">
                           {errorDetail.detail}
                         </p>
-                        <div className="flex items-center gap-2 text-[9px] text-cyan-400 bg-cyan-950/30 p-2 rounded border border-cyan-500/10">
-                          <HelpCircle className="w-3 h-3 shrink-0" />
-                          <span>SUGGESTION: {errorDetail.action}</span>
+                        <div className="flex flex-col gap-2 p-2 bg-cyan-950/30 rounded border border-cyan-500/10">
+                            <div className="flex items-center gap-2 text-[9px] text-cyan-400">
+                                <HelpCircle className="w-3 h-3 shrink-0" />
+                                <span>SUGGESTION: {errorDetail.action}</span>
+                            </div>
+                            {errorDetail.link && (
+                                <a 
+                                    href={errorDetail.link} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="text-[9px] text-cyan-500 hover:text-cyan-300 underline flex items-center gap-1"
+                                >
+                                    Documentation <ExternalLink className="w-2 h-2" />
+                                </a>
+                            )}
                         </div>
                      </div>
                      <button 
                         onClick={() => { setAppState(AppState.IDLE); disconnect(); }}
-                        className="text-[9px] text-cyan-500/60 hover:text-cyan-400 uppercase tracking-widest border border-cyan-500/20 px-6 py-2 hover:bg-cyan-500/5 transition-all"
+                        className="flex items-center gap-2 text-[9px] text-cyan-500/60 hover:text-cyan-400 uppercase tracking-widest border border-cyan-500/20 px-6 py-2 hover:bg-cyan-500/5 transition-all"
                      >
-                        Initiate System Recovery
+                        <RefreshCw className="w-3 h-3" /> System Recovery
                      </button>
                 </div>
             )}
@@ -354,7 +360,7 @@ const App: React.FC = () => {
             </div>
             <div className="h-20 flex flex-col justify-end gap-1 overflow-hidden">
                 {logs.map((log, i) => (
-                    <div key={i} className={`text-[10px] truncate font-mono flex gap-2 ${log.includes('ERR') ? 'text-red-500' : 'text-cyan-400/80'}`}>
+                    <div key={i} className={`text-[10px] truncate font-mono flex gap-2 ${log.includes('ERR') || log.includes('CRITICAL') || log.includes('HINT') ? 'text-red-500' : 'text-cyan-400/80'}`}>
                         <span className="opacity-30">[{new Date().toLocaleTimeString([], {hour12: false})}]</span>
                         {log}
                     </div>

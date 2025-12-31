@@ -56,15 +56,14 @@ export const useGeminiLive = () => {
       
       const apiKey = process.env.API_KEY;
       
-      // If no key is found in process.env and we aren't in a key-selection environment
+      // If we are not in AI Studio and no key is found, we can't initialize the client
       if (!apiKey && !window.aistudio) {
         setError("ERR_AUTH_MISSING");
         return;
       }
 
-      // Create AI instance immediately before connection. 
-      // If apiKey is null, we pass an empty string to force the SDK to fail predictably 
-      // if it hasn't been blocked by our own checks above.
+      // Initialize the SDK. We use an empty string as fallback to let the SDK 
+      // handle the missing key error if our local checks are bypassed.
       const ai = new GoogleGenAI({ apiKey: apiKey || "" });
       
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -149,13 +148,10 @@ export const useGeminiLive = () => {
             const rawMsg = err?.message || String(err) || "";
             let msg = "ERR_SESSION_DROP";
             
-            // Specifically catch the "Network error" which is common for WebSocket handshake failures
-            if (rawMsg.includes("Network error")) {
+            // "Network error" is common when billing isn't enabled for the API key 
+            // or if the key is invalid in a way that prevents the socket handshake.
+            if (rawMsg.includes("Network error") || rawMsg.includes("401") || rawMsg.includes("403")) {
               msg = "ERR_NETWORK_OR_AUTH";
-            } else if (rawMsg.includes("403")) {
-              msg = "ERR_API_RESTRICTED";
-            } else if (rawMsg.includes("401")) {
-              msg = "ERR_KEY_INVALID";
             } else if (rawMsg.toLowerCase().includes("requested entity was not found")) {
               msg = "ERR_NOT_FOUND";
             } else if (rawMsg.toLowerCase().includes("quota")) {
@@ -183,10 +179,8 @@ export const useGeminiLive = () => {
       const rawMsg = err.message || "";
       if (rawMsg.includes("Permission denied") || rawMsg.includes("device not found")) {
         setError("ERR_HARDWARE_ACCESS");
-      } else if (rawMsg.includes("API key not valid") || rawMsg.includes("invalid") || rawMsg.includes("Network error")) {
-        setError("ERR_NETWORK_OR_AUTH");
       } else {
-        setError("ERR_LINK_FAILURE");
+        setError("ERR_NETWORK_OR_AUTH");
       }
       cleanup();
     }
