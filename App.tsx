@@ -22,9 +22,9 @@ declare global {
 const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: string; link?: string }> = {
   ERR_AUTH_MISSING: {
     title: "Security Credentials Missing",
-    detail: "J.A.R.V.I.S. core detected a missing 'API_KEY'. This environment variable must be explicitly defined in your Vercel Project Settings for cloud-based deployment. Additionally, the Gemini Live API strictly requires an active 'Pay-as-you-go' (Paid) billing account.",
-    action: "Add the 'API_KEY' variable in Vercel Dashboard > Settings > Environment Variables. Ensure your project is on a billable plan in Google AI Studio.",
-    link: "https://vercel.com/docs/projects/environment-variables"
+    detail: "J.A.R.V.I.S. core failed to locate the 'API_KEY' environment variable. When deploying to Vercel, this must be manually configured in your Project Settings. Note: The Gemini Live API strictly requires a 'Paid / Pay-as-you-go' billing plan in Google AI Studio. Free Tier keys will be rejected.",
+    action: "Configure API_KEY in Vercel Dashboard > Settings > Environment Variables and ensure your GCP project has billing enabled.",
+    link: "https://ai.google.dev/gemini-api/docs/billing"
   },
   ERR_NETWORK_OR_AUTH: {
     title: "Neural Handshake Failed",
@@ -34,8 +34,8 @@ const ERROR_GUIDANCE: Record<string, { title: string; detail: string; action?: s
   },
   ERR_SESSION_DROP: {
     title: "Uplink Synchronization Lost",
-    detail: "The real-time neural handshake was interrupted. This is frequently caused by high latency, packet loss, or firewall restrictions on your current network environment.",
-    action: "Confirm network stability, disable any active VPNs, and attempt to re-establish the connection via the 'System Recovery' protocol.",
+    detail: "The real-time neural handshake was interrupted. This is frequently caused by high network latency, packet loss, or firewall restrictions interfering with the WebSocket stream.",
+    action: "Verify your internet stability, disable active VPNs, and trigger 'System Recovery' to attempt a manual re-link.",
   },
   ERR_KEY_INVALID: {
     title: "Invalid Token Detected",
